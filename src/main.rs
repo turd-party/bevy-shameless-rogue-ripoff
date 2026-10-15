@@ -1,4 +1,5 @@
 mod anatomy;
+pub mod genetics;
 mod procgen;
 pub mod snn;
 
@@ -19,6 +20,7 @@ fn main() {
             procgen::ProcGenPlugin,
             anatomy::AnatomyPlugin,
             snn::SnnPlugin,
+            genetics::GeneticsPlugin,
         ))
         .add_systems(Startup, (setup_scene, spawn_starter_humans))
         .run();

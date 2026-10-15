@@ -16,7 +16,7 @@ pub enum ActionIntent {
     FleeThreat,
 }
 
-#[derive(Component, Debug, Clone)]
+#[derive(Component, Debug, Clone, Reflect)]
 pub struct EvolvedRewardMatrix {
     pub food_pleasure_weight: f32,
     pub mating_reward_weight: f32,

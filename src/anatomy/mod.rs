@@ -82,6 +82,18 @@ pub fn spawn_biomechanical_human(
     let loco = crate::snn::brain::LocomotionSnnModule::default();
     let manip = crate::snn::brain::ManipulationSnnModule::default();
 
+    let genome = crate::genetics::genome::HumanGenome {
+        morphology: crate::genetics::genome::MorphologyChromosome {
+            skin_r: skin_tone.to_srgba().red,
+            skin_g: skin_tone.to_srgba().green,
+            skin_b: skin_tone.to_srgba().blue,
+            adult_height_scale: scale,
+            limb_thickness_factor: 1.0,
+            procedural_seed: skeleton_root.to_bits() ^ 0x5a5a5a5a,
+        },
+        ..default()
+    };
+
     commands
         .entity(skeleton_root)
         .insert((
@@ -95,6 +107,7 @@ pub fn spawn_biomechanical_human(
             exec,
             loco,
             manip,
+            genome,
         ))
         .with_children(|parent| {
             // Visual Head Hull
