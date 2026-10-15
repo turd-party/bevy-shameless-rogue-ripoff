@@ -1,6 +1,7 @@
 mod anatomy;
 pub mod genetics;
 mod procgen;
+pub mod rpg;
 pub mod snn;
 
 use bevy::prelude::*;
@@ -21,6 +22,7 @@ fn main() {
             anatomy::AnatomyPlugin,
             snn::SnnPlugin,
             genetics::GeneticsPlugin,
+            rpg::RpgPlugin,
         ))
         .add_systems(Startup, (setup_scene, spawn_starter_humans))
         .run();
@@ -49,8 +51,10 @@ fn spawn_starter_humans(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // Spawn Starter Male Human
-    anatomy::spawn_biomechanical_human(
+    // 1. Spawn Player Party Member 1 (Vanguard Leader)
+    // Executive SNN is removed: player tactical commands replace executive willpower,
+    // directly driving the low-level Locomotion and Manipulation SNN modules.
+    let party_member_1 = anatomy::spawn_biomechanical_human(
         &mut commands,
         &mut meshes,
         &mut materials,
@@ -59,9 +63,20 @@ fn spawn_starter_humans(
         1.0,
         Color::srgb(0.85, 0.65, 0.52),
     );
+    commands
+        .entity(party_member_1)
+        .remove::<snn::brain::ExecutiveSnnModule>()
+        .insert((
+            rpg::party::PartyMember {
+                index: 0,
+                designation: "Vanguard Leader".into(),
+                is_selected: true,
+            },
+            rpg::party::OrderQueue::default(),
+        ));
 
-    // Spawn Starter Female Human
-    anatomy::spawn_biomechanical_human(
+    // 2. Spawn Player Party Member 2 (Apothecary Scout)
+    let party_member_2 = anatomy::spawn_biomechanical_human(
         &mut commands,
         &mut meshes,
         &mut materials,
@@ -69,5 +84,37 @@ fn spawn_starter_humans(
         BiologicalSex::Female,
         0.95,
         Color::srgb(0.78, 0.58, 0.45),
+    );
+    commands
+        .entity(party_member_2)
+        .remove::<snn::brain::ExecutiveSnnModule>()
+        .insert((
+            rpg::party::PartyMember {
+                index: 1,
+                designation: "Apothecary Scout".into(),
+                is_selected: false,
+            },
+            rpg::party::OrderQueue::default(),
+        ));
+
+    // 3. Spawn Autonomous Wild NPC Humans
+    // Retain their full Executive SNN to forage, mate, and evolve naturally in the wild!
+    anatomy::spawn_biomechanical_human(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        Vec3::new(12.0, 0.0, -8.0),
+        BiologicalSex::Male,
+        1.05,
+        Color::srgb(0.65, 0.48, 0.35),
+    );
+    anatomy::spawn_biomechanical_human(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        Vec3::new(14.0, 0.0, -7.5),
+        BiologicalSex::Female,
+        0.92,
+        Color::srgb(0.92, 0.72, 0.58),
     );
 }
