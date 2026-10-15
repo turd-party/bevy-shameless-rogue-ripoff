@@ -1,5 +1,6 @@
 mod anatomy;
 mod procgen;
+pub mod snn;
 
 use bevy::prelude::*;
 use anatomy::hull::BiologicalSex;
@@ -17,6 +18,7 @@ fn main() {
         .add_plugins((
             procgen::ProcGenPlugin,
             anatomy::AnatomyPlugin,
+            snn::SnnPlugin,
         ))
         .add_systems(Startup, (setup_scene, spawn_starter_humans))
         .run();

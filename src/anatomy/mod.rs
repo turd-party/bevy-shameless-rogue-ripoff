@@ -76,6 +76,12 @@ pub fn spawn_biomechanical_human(
         0.14 * scale,
     ));
 
+    let eyes = crate::snn::eyes::StereoscopicEyes::new(scale);
+    let reward = crate::snn::brain::EvolvedRewardMatrix::default();
+    let exec = crate::snn::brain::ExecutiveSnnModule::default();
+    let loco = crate::snn::brain::LocomotionSnnModule::default();
+    let manip = crate::snn::brain::ManipulationSnnModule::default();
+
     commands
         .entity(skeleton_root)
         .insert((
@@ -84,6 +90,11 @@ pub fn spawn_biomechanical_human(
             metabolism,
             mouth,
             repro,
+            eyes,
+            reward,
+            exec,
+            loco,
+            manip,
         ))
         .with_children(|parent| {
             // Visual Head Hull
