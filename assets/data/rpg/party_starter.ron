@@ -1,0 +1,22 @@
+// RPG Party & Class Starter Configurations (.ron)
+PartyConfig(
+    starting_party_size: 2,
+    starting_party_members: [
+        (
+            designation: "Vanguard Leader",
+            sex: Male,
+            caloric_reserve: 800.0,
+            morphology_seed: 101,
+            neural_seed: 202,
+        ),
+        (
+            designation: "Apothecary Scout",
+            sex: Female,
+            caloric_reserve: 850.0,
+            morphology_seed: 303,
+            neural_seed: 404,
+        ),
+    ],
+    tactical_order_queue_limit: 8,
+    selection_ring_color_rgba: (0.2, 0.9, 0.3, 0.8),
+)

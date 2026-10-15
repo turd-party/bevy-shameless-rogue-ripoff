@@ -1,0 +1,13 @@
+// Biome & Ecosystem Rules (.ron)
+BiomeDefinition(
+    biome_id: "temperate_wilderness",
+    ambient_temperature_celsius: 21.0,
+    soil_base_fertility: 1.0,
+    corpse_decomposition_rate_per_sec: 0.05,
+    tree_density_per_hectare: 45.0,
+    fruit_bloom_frequency_secs: 90.0,
+    terrain_height_scale: 18.0,
+    terrain_roughness: 0.45,
+    noise_octaves: 4,
+    gravity: (0.0, -9.81, 0.0),
+)

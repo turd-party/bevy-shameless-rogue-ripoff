@@ -1,0 +1,17 @@
+// Human Species Baseline Archetype (.ron)
+HumanArchetype(
+    species_id: "human_sapiens",
+    metabolic_rate_per_sec: 1.2,
+    base_caloric_capacity: 1000.0,
+    starvation_threshold: 0.0,
+    gestation_duration_secs: 180.0,
+    infant_spawn_scale: 0.4,
+    adult_maturity_scale: 1.0,
+    eye_vision_resolution: (8, 8),
+    eye_field_of_view_degrees: 90.0,
+    eye_max_range_meters: 40.0,
+    hearing_range_meters: 30.0,
+    olfactory_decay_half_life_secs: 15.0,
+    genetic_mutation_rate: 0.05,
+    genetic_mutation_variance: 0.15,
+)

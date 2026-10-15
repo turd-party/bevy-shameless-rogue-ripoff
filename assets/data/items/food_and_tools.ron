@@ -1,0 +1,43 @@
+// Food & Items Registry (.ron)
+ItemRegistry(
+    items: [
+        (
+            id: "wild_berry",
+            name: "Wild Luminescent Berry",
+            category: Food(
+                caloric_value: 120.0,
+                hydration_value: 30.0,
+                chewing_duration_secs: 1.5,
+            ),
+            physical_mass_kg: 0.08,
+            bounding_radius: 0.1,
+            procedural_mesh_seed: 42,
+            procedural_hue: 0.85,
+        ),
+        (
+            id: "succulent_fruit",
+            name: "Prismatic Canopy Fruit",
+            category: Food(
+                caloric_value: 350.0,
+                hydration_value: 80.0,
+                chewing_duration_secs: 2.5,
+            ),
+            physical_mass_kg: 0.35,
+            bounding_radius: 0.22,
+            procedural_mesh_seed: 1337,
+            procedural_hue: 0.12,
+        ),
+        (
+            id: "crude_flint_knife",
+            name: "Crude Flint Knife",
+            category: Tool(
+                sharpness: 1.8,
+                durability: 100.0,
+            ),
+            physical_mass_kg: 0.45,
+            bounding_radius: 0.25,
+            procedural_mesh_seed: 999,
+            procedural_hue: 0.0,
+        ),
+    ],
+)
