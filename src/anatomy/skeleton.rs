@@ -278,6 +278,56 @@ pub fn spawn_humanoid_skeleton(
         .id();
     bone_entities.push((BoneKind::RightShin, right_shin));
 
+    // Ribcage
+    let ribcage = commands
+        .spawn((
+            Transform::from_translation(base_pos + Vec3::new(0.0, 1.40 * scale, 0.0)),
+            BoneSegment {
+                kind: BoneKind::Ribcage,
+                length: 0.26 * scale,
+                radius: 0.16 * scale,
+                mass_kg: 12.0 * scale.powi(3),
+                is_fractured: false,
+                max_stress_threshold: 4800.0,
+                current_stress: 0.0,
+            },
+        ))
+        .id();
+    bone_entities.push((BoneKind::Ribcage, ribcage));
+
+    // Left & Right Feet
+    let left_foot = commands
+        .spawn((
+            Transform::from_translation(base_pos + Vec3::new(-0.14 * scale, 0.05 * scale, 0.04 * scale)),
+            BoneSegment {
+                kind: BoneKind::LeftFoot,
+                length: 0.18 * scale,
+                radius: 0.05 * scale,
+                mass_kg: 1.1 * scale.powi(3),
+                is_fractured: false,
+                max_stress_threshold: 2200.0,
+                current_stress: 0.0,
+            },
+        ))
+        .id();
+    bone_entities.push((BoneKind::LeftFoot, left_foot));
+
+    let right_foot = commands
+        .spawn((
+            Transform::from_translation(base_pos + Vec3::new(0.14 * scale, 0.05 * scale, 0.04 * scale)),
+            BoneSegment {
+                kind: BoneKind::RightFoot,
+                length: 0.18 * scale,
+                radius: 0.05 * scale,
+                mass_kg: 1.1 * scale.powi(3),
+                is_fractured: false,
+                max_stress_threshold: 2200.0,
+                current_stress: 0.0,
+            },
+        ))
+        .id();
+    bone_entities.push((BoneKind::RightFoot, right_foot));
+
     // Root Humanoid Skeleton Entity
     commands
         .spawn((

@@ -1,11 +1,11 @@
 [package]
 name = "bevy_rogue_sandbox"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 
 [dependencies]
 bevy = { version = "0.20.0", default-features = true }
-nexus3d = { version = "0.7.0" }
+nexus3d = { version = "0.7.0", features = ["rbd", "mpm"] }
 ferromorphic = "0.23.2"
 serde = { version = "1.0", features = ["derive"] }
 ron = "0.8"

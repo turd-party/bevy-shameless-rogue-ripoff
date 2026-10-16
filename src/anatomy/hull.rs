@@ -5,7 +5,9 @@ use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use super::skeleton::BoneKind;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect, Serialize, Deserialize)]
 pub enum BiologicalSex {
     Male,
     Female,

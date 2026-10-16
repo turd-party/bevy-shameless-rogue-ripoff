@@ -3,6 +3,8 @@
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
+use super::terrain::{evaluate_terrain_height, TerrainConfig};
+use crate::data::{ContentRegistry, ItemCategory};
 
 #[derive(Component, Debug)]
 pub struct ProceduralTree {
@@ -17,6 +19,8 @@ pub struct PluckableFruit {
     pub hydration_value: f32,
     pub mass_kg: f32,
     pub is_attached: bool,
+    pub ripeness_timer: f32,
+    pub vertical_velocity: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -42,8 +46,8 @@ pub struct SpaceColonizationConfig {
 impl Default for SpaceColonizationConfig {
     fn default() -> Self {
         Self {
-            crown_center: Vec3::new(0.0, 7.0, 0.0),
-            crown_radius: Vec3::new(3.5, 3.0, 3.5),
+            crown_center: Vec3::new(0.0, 6.2, 0.0),
+            crown_radius: Vec3::new(3.5, 2.8, 3.5),
             attractor_count: 180,
             segment_length: 0.6,
             influence_radius: 5.0,
@@ -57,11 +61,12 @@ pub fn generate_space_colonization_tree(
     seed: u64,
     config: &SpaceColonizationConfig,
 ) -> (Mesh, Vec<Vec3>) {
-    // Generate deterministic attractor points in crown volume
     let mut attractors = Vec::with_capacity(config.attractor_count);
     let mut lcg = seed;
     let mut next_f32 = || -> f32 {
-        lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        lcg = lcg
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((lcg >> 32) as u32 as f32) / (u32::MAX as f32)
     };
 
@@ -70,16 +75,16 @@ pub fn generate_space_colonization_tree(
         let v = next_f32() * 2.0 - 1.0;
         let w = next_f32() * 2.0 - 1.0;
         if u * u + v * v + w * w <= 1.0 {
-            let pos = config.crown_center + Vec3::new(
-                u * config.crown_radius.x,
-                v * config.crown_radius.y,
-                w * config.crown_radius.z,
-            );
+            let pos = config.crown_center
+                + Vec3::new(
+                    u * config.crown_radius.x,
+                    v * config.crown_radius.y,
+                    w * config.crown_radius.z,
+                );
             attractors.push(pos);
         }
     }
 
-    // Root trunk nodes
     let mut nodes: Vec<BranchNode> = vec![
         BranchNode {
             position: Vec3::ZERO,
@@ -90,7 +95,7 @@ pub fn generate_space_colonization_tree(
             is_terminal: false,
         },
         BranchNode {
-            position: Vec3::new(0.0, 1.5, 0.0),
+            position: Vec3::new(0.0, 1.4, 0.0),
             parent_index: Some(0),
             growth_direction: Vec3::Y,
             attractor_count: 0,
@@ -98,7 +103,7 @@ pub fn generate_space_colonization_tree(
             is_terminal: false,
         },
         BranchNode {
-            position: Vec3::new(0.0, 3.0, 0.0),
+            position: Vec3::new(0.0, 2.8, 0.0),
             parent_index: Some(1),
             growth_direction: Vec3::Y,
             attractor_count: 0,
@@ -107,19 +112,16 @@ pub fn generate_space_colonization_tree(
         },
     ];
 
-    // Iterative Space Colonization loop
     for _ in 0..config.max_iterations {
         if attractors.is_empty() {
             break;
         }
 
-        // Reset attraction accumulators
         for node in &mut nodes {
             node.growth_direction = Vec3::ZERO;
             node.attractor_count = 0;
         }
 
-        // Associate each attractor with the closest branch node
         for attractor in &attractors {
             let mut closest_node_idx = None;
             let mut min_dist = config.influence_radius;
@@ -139,7 +141,6 @@ pub fn generate_space_colonization_tree(
             }
         }
 
-        // Spawn new nodes
         let mut new_nodes = Vec::new();
         let current_node_count = nodes.len();
 
@@ -169,34 +170,32 @@ pub fn generate_space_colonization_tree(
 
         nodes.extend(new_nodes);
 
-        // Remove attractors that reached kill distance
         attractors.retain(|attr| {
-            !nodes[current_node_count..].iter().any(|n| n.position.distance(*attr) < config.kill_distance)
+            !nodes[current_node_count..]
+                .iter()
+                .any(|n| n.position.distance(*attr) < config.kill_distance)
         });
     }
 
-    // Collect terminal nodes for fruit socket locations
     let fruit_sockets: Vec<Vec3> = nodes
         .iter()
-        .filter(|n| n.is_terminal && n.position.y > 4.5)
+        .filter(|n| n.is_terminal && n.position.y > 3.5)
         .map(|n| n.position)
         .collect();
 
-    // Construct 3D mesh (poly-cylinder segments along connected branch pairs)
     let radial_segments = 6;
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     let mut uvs = Vec::new();
     let mut indices = Vec::new();
 
-    for (_node_idx, node) in nodes.iter().enumerate() {
+    for node in &nodes {
         if let Some(parent_idx) = node.parent_index {
             let parent = &nodes[parent_idx];
             let p0 = parent.position;
             let p1 = node.position;
             let forward = (p1 - p0).normalize_or_zero();
-            
-            // Generate orthogonal basis
+
             let up = if forward.y.abs() > 0.95 { Vec3::X } else { Vec3::Y };
             let right = forward.cross(up).normalize();
             let true_up = right.cross(forward).normalize();
@@ -251,7 +250,8 @@ pub struct FloraPlugin;
 
 impl Plugin for FloraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_procedural_forest);
+        app.add_systems(Startup, spawn_procedural_forest)
+            .add_systems(Update, update_falling_fruit_system);
     }
 }
 
@@ -259,7 +259,22 @@ fn spawn_procedural_forest(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    terrain_config: Res<TerrainConfig>,
+    registry: Option<Res<ContentRegistry>>,
 ) {
+    let (default_calories, default_hydration, default_mass) = registry
+        .as_ref()
+        .and_then(|r| r.primary_fruit_item())
+        .map(|item| match item.category {
+            ItemCategory::Food {
+                caloric_value,
+                hydration_value,
+                ..
+            } => (caloric_value, hydration_value, item.physical_mass_kg),
+            _ => (250.0, 60.0, 0.25),
+        })
+        .unwrap_or((250.0, 60.0, 0.25));
+
     let bark_material = materials.add(StandardMaterial {
         base_color: Color::srgb(0.35, 0.22, 0.12),
         perceptual_roughness: 0.95,
@@ -267,53 +282,105 @@ fn spawn_procedural_forest(
     });
 
     let fruit_material = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.9, 0.15, 0.25),
-        emissive: LinearRgba::new(0.3, 0.05, 0.08, 1.0),
+        base_color: Color::srgb(0.92, 0.18, 0.26),
+        emissive: LinearRgba::new(0.35, 0.06, 0.09, 1.0),
         perceptual_roughness: 0.3,
         ..default()
     });
 
-    let fruit_mesh_handle = meshes.add(Sphere::new(0.18).mesh().ico(2).expect("valid sphere mesh"));
+    let fruit_mesh_handle = meshes.add(
+        Sphere::new(0.20)
+            .mesh()
+            .ico(2)
+            .expect("valid sphere mesh"),
+    );
 
-    let tree_positions = [
-        Vec3::new(8.0, 0.0, 8.0),
-        Vec3::new(-12.0, 0.0, 6.0),
-        Vec3::new(14.0, 0.0, -10.0),
-        Vec3::new(-8.0, 0.0, -14.0),
+    let tree_coords = [
+        (7.5, 6.5),
+        (-10.0, 5.5),
+        (11.0, -7.5),
+        (-7.5, -11.0),
+        (3.5, -9.0),
+        (-4.5, 9.5),
     ];
 
-    for (i, &origin) in tree_positions.iter().enumerate() {
+    for (i, &(tx, tz)) in tree_coords.iter().enumerate() {
+        let ground_y = evaluate_terrain_height(tx, tz, &terrain_config);
+        let origin = Vec3::new(tx, ground_y, tz);
+
         let seed = 42 + i as u64 * 7919;
         let config = SpaceColonizationConfig::default();
         let (tree_mesh, fruit_sockets) = generate_space_colonization_tree(seed, &config);
         let tree_handle = meshes.add(tree_mesh);
 
-        let _tree_entity = commands
-            .spawn((
-                Mesh3d(tree_handle),
-                MeshMaterial3d(bark_material.clone()),
-                Transform::from_translation(origin),
-                ProceduralTree {
-                    seed,
-                    branch_count: 50,
-                    fruit_socket_count: fruit_sockets.len(),
-                },
-            ))
-            .id();
+        commands.spawn((
+            Mesh3d(tree_handle),
+            MeshMaterial3d(bark_material.clone()),
+            Transform::from_translation(origin),
+            ProceduralTree {
+                seed,
+                branch_count: 50,
+                fruit_socket_count: fruit_sockets.len(),
+            },
+        ));
 
-        // Spawn physical pluckable fruits at selected terminal branch sockets
-        for socket in fruit_sockets.iter().take(5) {
+        // Spawn canopy fruits (which ripen and drop under gravity) + already-dropped ground fruits near trunk
+        for (s_idx, socket) in fruit_sockets.iter().take(6).enumerate() {
+            let is_already_fallen = s_idx < 3;
+            let spawn_pos = if is_already_fallen {
+                let fx = origin.x + socket.x * 0.65;
+                let fz = origin.z + socket.z * 0.65;
+                let fy = evaluate_terrain_height(fx, fz, &terrain_config) + 0.20;
+                Vec3::new(fx, fy, fz)
+            } else {
+                origin + *socket
+            };
+
             commands.spawn((
                 Mesh3d(fruit_mesh_handle.clone()),
                 MeshMaterial3d(fruit_material.clone()),
-                Transform::from_translation(origin + *socket),
+                Transform::from_translation(spawn_pos),
                 PluckableFruit {
-                    caloric_value: 200.0,
-                    hydration_value: 50.0,
-                    mass_kg: 0.25,
-                    is_attached: true,
+                    caloric_value: default_calories,
+                    hydration_value: default_hydration,
+                    mass_kg: default_mass,
+                    is_attached: !is_already_fallen,
+                    ripeness_timer: (s_idx as f32) * 4.0,
+                    vertical_velocity: 0.0,
                 },
             ));
+        }
+    }
+}
+
+/// Ripens canopy fruit so it detaches and falls under gravity onto the CDLOD terrain surface
+pub fn update_falling_fruit_system(
+    mut fruit_query: Query<(&mut Transform, &mut PluckableFruit)>,
+    terrain_config: Res<TerrainConfig>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs();
+    if dt <= 0.0 {
+        return;
+    }
+
+    for (mut tf, mut fruit) in &mut fruit_query {
+        if fruit.is_attached {
+            fruit.ripeness_timer += dt;
+            if fruit.ripeness_timer > 18.0 {
+                fruit.is_attached = false;
+            }
+        } else {
+            let ground_y = evaluate_terrain_height(tf.translation.x, tf.translation.z, &terrain_config) + 0.20;
+            if tf.translation.y > ground_y {
+                fruit.vertical_velocity -= 9.81 * dt;
+                tf.translation.y = (tf.translation.y + fruit.vertical_velocity * dt).max(ground_y);
+                if tf.translation.y <= ground_y {
+                    fruit.vertical_velocity = 0.0;
+                }
+            } else {
+                tf.translation.y = ground_y;
+            }
         }
     }
 }

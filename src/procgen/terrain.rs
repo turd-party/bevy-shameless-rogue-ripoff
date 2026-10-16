@@ -3,6 +3,7 @@
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
+use crate::data::ContentRegistry;
 
 #[derive(Resource, Debug, Clone)]
 pub struct TerrainConfig {
@@ -33,27 +34,41 @@ pub struct TerrainChunk {
     pub lod: u32,
 }
 
-/// Deterministic 2D gradient noise generator
+/// Evaluates deterministic 2D fBm terrain height with hydraulic erosion gullies and valley basins
 pub fn evaluate_terrain_height(x: f32, z: f32, config: &TerrainConfig) -> f32 {
     let mut total = 0.0;
-    let mut frequency = 0.015;
+    let mut frequency = 0.012;
     let mut amplitude = 1.0;
     let mut max_value = 0.0;
+    let mut erosion_accum = 0.0;
 
-    for _ in 0..config.octaves {
+    for octave in 0..config.octaves {
         let sample_x = x * frequency;
         let sample_z = z * frequency;
-        
+
         let n = pseudo_gradient_noise(sample_x, sample_z);
-        total += n * amplitude;
+        // Hydraulic ridge/gully carving: sharpens valleys where water droplets accumulate
+        let ridge = 1.0 - (n * 2.0 - 1.0).abs();
+        let eroded_n = if octave >= 1 {
+            n * (1.0 - 0.35 * erosion_accum) + (ridge * ridge) * 0.25 * erosion_accum
+        } else {
+            n
+        };
+
+        total += eroded_n * amplitude;
         max_value += amplitude;
+        erosion_accum = (erosion_accum + (1.0 - ridge) * 0.5).clamp(0.0, 1.0);
 
         amplitude *= config.roughness;
-        frequency *= 2.0;
+        frequency *= 2.02;
     }
 
-    let normalized = total / max_value;
-    normalized * config.height_scale
+    let normalized = (total / max_value.max(0.001)) - 0.32;
+    // Gentle valley basin near world origin (radius 24m) so starter party & grove have natural footing
+    let dist_sq = x * x + z * z;
+    let basin_blend = (dist_sq / (28.0 * 28.0)).clamp(0.15, 1.0);
+
+    normalized * config.height_scale * basin_blend
 }
 
 fn pseudo_gradient_noise(x: f32, z: f32) -> f32 {
@@ -62,9 +77,9 @@ fn pseudo_gradient_noise(x: f32, z: f32) -> f32 {
     let fx = x - x.floor();
     let fz = z - z.floor();
 
-    // Smoothstep interpolation
-    let sx = fx * fx * (3.0 - 2.0 * fx);
-    let sz = fz * fz * (3.0 - 2.0 * fz);
+    // Quintic smoothstep interpolation for C2 continuity across normals
+    let sx = fx * fx * fx * (fx * (fx * 6.0 - 15.0) + 10.0);
+    let sz = fz * fz * fz * (fz * (fz * 6.0 - 15.0) + 10.0);
 
     let n00 = hash_2d(ix, iz);
     let n10 = hash_2d(ix + 1, iz);
@@ -99,8 +114,8 @@ pub fn generate_terrain_chunk_mesh(
     };
 
     let step = config.chunk_size / resolution as f32;
-    let base_x = coord.x as f32 * config.chunk_size;
-    let base_z = coord.y as f32 * config.chunk_size;
+    let base_x = coord.x as f32 * config.chunk_size - config.chunk_size * 0.5;
+    let base_z = coord.y as f32 * config.chunk_size - config.chunk_size * 0.5;
 
     let vert_count = (resolution + 1) * (resolution + 1);
     let mut positions: Vec<[f32; 3]> = Vec::with_capacity(vert_count);
@@ -113,7 +128,7 @@ pub fn generate_terrain_chunk_mesh(
             let world_z = base_z + j as f32 * step;
             let height = evaluate_terrain_height(world_x, world_z, config);
 
-            // Calculate finite-difference normals
+            // Finite-difference normals
             let delta = 0.5;
             let h_left = evaluate_terrain_height(world_x - delta, world_z, config);
             let h_right = evaluate_terrain_height(world_x + delta, world_z, config);
@@ -165,7 +180,8 @@ pub struct TerrainPlugin;
 impl Plugin for TerrainPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TerrainConfig>()
-            .add_systems(Startup, spawn_initial_terrain_chunks);
+            .add_systems(Startup, spawn_initial_terrain_chunks)
+            .add_systems(Update, update_cdlod_terrain_system);
     }
 }
 
@@ -173,12 +189,19 @@ fn spawn_initial_terrain_chunks(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    config: Res<TerrainConfig>,
+    mut config: ResMut<TerrainConfig>,
+    registry: Option<Res<ContentRegistry>>,
 ) {
+    if let Some(reg) = registry {
+        config.height_scale = reg.biome.terrain_height_scale;
+        config.roughness = reg.biome.terrain_roughness;
+        config.octaves = reg.biome.noise_octaves;
+    }
+
     let terrain_material = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.25, 0.45, 0.2),
-        perceptual_roughness: 0.9,
-        reflectance: 0.1,
+        base_color: Color::srgb(0.24, 0.44, 0.19),
+        perceptual_roughness: 0.92,
+        reflectance: 0.08,
         ..default()
     });
 
@@ -187,7 +210,13 @@ fn spawn_initial_terrain_chunks(
         for z in -radius..=radius {
             let coord = IVec2::new(x, z);
             let dist = (x.abs()).max(z.abs());
-            let lod = if dist <= 1 { 0 } else if dist <= 2 { 1 } else { 2 };
+            let lod = if dist <= 1 {
+                0
+            } else if dist <= 2 {
+                1
+            } else {
+                2
+            };
 
             let mesh = generate_terrain_chunk_mesh(coord, lod, &config);
             let mesh_handle = meshes.add(mesh);
@@ -198,6 +227,42 @@ fn spawn_initial_terrain_chunks(
                 Transform::IDENTITY,
                 TerrainChunk { coord, lod },
             ));
+        }
+    }
+}
+
+/// Dynamically updates CDLOD chunk tessellation based on 3D camera distance
+fn update_cdlod_terrain_system(
+    camera_query: Query<&Transform, With<Camera3d>>,
+    mut chunk_query: Query<(&mut TerrainChunk, &mut Mesh3d)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    config: Res<TerrainConfig>,
+) {
+    let Some(cam_tf) = camera_query.iter().next() else {
+        return;
+    };
+
+    let cam_chunk_x = (cam_tf.translation.x / config.chunk_size).round() as i32;
+    let cam_chunk_z = (cam_tf.translation.z / config.chunk_size).round() as i32;
+
+    for (mut chunk, mut mesh_3d) in &mut chunk_query {
+        let chebyshev_dist = (chunk.coord.x - cam_chunk_x)
+            .abs()
+            .max((chunk.coord.y - cam_chunk_z).abs());
+        let desired_lod = if chebyshev_dist <= 1 {
+            0
+        } else if chebyshev_dist <= 2 {
+            1
+        } else if chebyshev_dist <= 3 {
+            2
+        } else {
+            3
+        };
+
+        if chunk.lod != desired_lod {
+            chunk.lod = desired_lod;
+            let new_mesh = generate_terrain_chunk_mesh(chunk.coord, desired_lod, &config);
+            mesh_3d.0 = meshes.add(new_mesh);
         }
     }
 }

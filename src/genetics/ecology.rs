@@ -100,6 +100,8 @@ pub fn update_plant_absorption_and_fruiting(
                     hydration_value: 60.0,
                     mass_kg: 0.3,
                     is_attached: true,
+                    ripeness_timer: 0.0,
+                    vertical_velocity: 0.0,
                 },
             ));
         }
